@@ -47,9 +47,9 @@ public class Decoder
         }
     }
     
-    private T InternalDecode<T>(Input input, T instance)
+    private T InternalDecode<T>(Input input, T instance) where T : notnull
     {
-        var properties = typeof(T).GetProperties();
+        var properties =  instance.GetType().GetProperties();
 
         foreach (var property in properties)
         {

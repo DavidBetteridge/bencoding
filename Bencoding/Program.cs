@@ -11,7 +11,7 @@ Console.WriteLine(result.Town);
 Console.WriteLine(result.Age);
 
 foreach (var cat in result.Cats)
-    Console.WriteLine(cat);
+    Console.WriteLine(cat.Name);
 
 foreach (var pn in result.PrimeNumbers)
     Console.WriteLine(pn);
@@ -22,6 +22,11 @@ class SimpleTest
     public string Name { get; set; } = string.Empty;
     public int Age { get; set; }
     public string Town { get; set; } = string.Empty;
-    public List<string> Cats { get; set; }
+    public List<Cat> Cats { get; set; }
     public List<int> PrimeNumbers { get; set; }
+}
+
+class Cat
+{
+    public string Name { get; set; }
 }
