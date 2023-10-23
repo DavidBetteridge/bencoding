@@ -4,12 +4,12 @@ namespace Bencoding;
 
 public class Decoder
 {
-    public T Decode<T>(string input)
+    public T Decode<T>(string input) where T : notnull
     {
         var type = typeof(T);
         var instance = (T)Activator.CreateInstance(type)!;
         
-        return InternalDecode<T>(new Input(input), instance);
+        return PopulateObject(new Input(input), instance);
     }
 
     private class Input
@@ -47,91 +47,142 @@ public class Decoder
         }
     }
     
-    private T InternalDecode<T>(Input input, T instance) where T : notnull
+    private T PopulateObject<T>(Input input, T instance) where T : notnull
     {
-        var properties =  instance.GetType().GetProperties();
+        var properties = instance.GetType().GetProperties();
 
         foreach (var property in properties)
         {
-            if (property.PropertyType == typeof(string))
+            ParseProperty(input, instance, property);
+        }
+
+        return instance;
+    }
+
+    private void ParseProperty<T>(Input input, T instance, PropertyInfo property) where T : notnull
+    {
+        if (property.PropertyType == typeof(string))
+        {
+            var propertyValue = ParseString(input);
+            property.SetValue(instance, propertyValue);
+        }
+
+        else if (property.PropertyType == typeof(int))
+        {
+            var propertyValue = ParseInt(input);
+            property.SetValue(instance, propertyValue);
+        }
+
+        else if (property.PropertyType.Name == "Dictionary`2")
+        {
+            var list = ParseDictionary<T>(input, property);
+            property.SetValue(instance, list);
+        }
+
+        else if (property.PropertyType.Name == "List`1")
+        {
+            var list = ParseList<T>(input, property);
+            property.SetValue(instance, list);
+        }
+
+        else
+        {
+            var childInstance = Activator.CreateInstance(property.PropertyType)!;
+            PopulateObject(input, childInstance);
+            property.SetValue(instance, childInstance);
+        }
+    }
+
+    private object ParseList<T>(Input input, PropertyInfo property) where T : notnull
+    {
+        // Create the list
+        var list = Activator.CreateInstance(property.PropertyType);
+        var childType = property.PropertyType.GenericTypeArguments[0];
+
+        input.Eat('l');
+
+        while (input.Peek() != 'e')
+        {
+            if (childType == typeof(string))
             {
                 var propertyValue = ParseString(input);
-                property.SetValue(instance, propertyValue);
+                property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { propertyValue });
             }
-
-            if (property.PropertyType == typeof(int))
+            else if (childType == typeof(int))
             {
                 var propertyValue = ParseInt(input);
-                property.SetValue(instance, propertyValue);
+                property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { (object)propertyValue });
             }
-
-            if (property.PropertyType.Name == "Dictionary`2")
+            else if (childType.Name == "List`1")
             {
-                // Create the list
-                var list = Activator.CreateInstance(property.PropertyType);
-                var childType = property.PropertyType.GenericTypeArguments[1];
-                input.Eat('d');
-                while (input.Peek() != 'e')
-                {
-                    var key = ParseString(input);
-                    
-                    if (childType == typeof(string))
-                    {
-                        var propertyValue = ParseString(input);
-                        property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { key, propertyValue });
-                    }
-                    else if (childType == typeof(int))
-                    {
-                        var propertyValue = ParseInt(input);
-                        property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { key, (object)propertyValue });
-                    }
-                    else
-                    {
-                        var childInstance = Activator.CreateInstance(childType)!;
-                        InternalDecode(input, childInstance);
-                        property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { key, childInstance });                        
-                    }
-
-                }
-                input.Eat('e');
-                property.SetValue(instance, list);
+                var propertyValue = ParseList<T>(input, property);
+                property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { propertyValue });
             }
-
-            if (property.PropertyType.Name == "List`1")
+            else if (childType.Name == "Dictionary`2")
             {
-                // Create the list
-                var list = Activator.CreateInstance(property.PropertyType);
-                var childType = property.PropertyType.GenericTypeArguments[0];
-
-                input.Eat('l');
-
-                while (input.Peek() != 'e')
-                {
-                    if (childType == typeof(string))
-                    {
-                        var propertyValue = ParseString(input);
-                        property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { propertyValue });
-                    }
-                    else if (childType == typeof(int))
-                    {
-                        var propertyValue = ParseInt(input);
-                        property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { (object)propertyValue });
-                    }
-                    else
-                    {
-                        var childInstance = Activator.CreateInstance(childType)!;
-                        InternalDecode(input, childInstance);
-                        property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { childInstance });                        
-                    }
-
-                }
-                input.Eat('e');
-
-                property.SetValue(instance, list);
+                var propertyValue = ParseDictionary<T>(input, property);
+                property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { propertyValue });
+            }
+            else
+            {
+                var childInstance = Activator.CreateInstance(childType)!;
+                PopulateObject(input, childInstance);
+                property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { childInstance });
             }
         }
 
-        return (T)instance;
+        input.Eat('e');
+        return list!;
+    }
+
+    private object ParseDictionary<T>(Input input, PropertyInfo property) where T : notnull
+    {
+        // Create the dictionary
+        var list = Activator.CreateInstance(property.PropertyType);
+        var childType = property.PropertyType.GenericTypeArguments[1];
+        input.Eat('d');
+        while (input.Peek() != 'e')
+        {
+            var key = ParseString(input);
+
+            switch (childType.Name)
+            {
+                case "String":
+                {
+                    var propertyValue = ParseString(input);
+                    property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { key, propertyValue });
+                    break;
+                }
+                case "Int32":
+                {
+                    var propertyValue = ParseInt(input);
+                    property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { key, (object)propertyValue });
+                    break;
+                }
+                case "List`1":
+                {
+                    var propertyValue = ParseList<T>(input, property);
+                    property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { key, propertyValue });
+                    break;
+                }
+                case "Dictionary`2":
+                {
+                    var propertyValue = ParseDictionary<T>(input, property);
+                    property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { key, propertyValue });
+                    break;
+                }
+                default:
+                {
+                    var childInstance = Activator.CreateInstance(childType)!;
+                    PopulateObject(input, childInstance);
+                    property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { key, childInstance });
+                    break;
+                }
+            }
+        }
+
+        input.Eat('e');
+        return list;
     }
 
 
