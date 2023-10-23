@@ -6,7 +6,10 @@ public class Decoder
 {
     public T Decode<T>(string input)
     {
-        return InternalDecode<T>(new Input(input));
+        var type = typeof(T);
+        var instance = (T)Activator.CreateInstance(type)!;
+        
+        return InternalDecode<T>(new Input(input), instance);
     }
 
     private class Input
@@ -44,11 +47,9 @@ public class Decoder
         }
     }
     
-    private T InternalDecode<T>(Input input)
+    private T InternalDecode<T>(Input input, T instance)
     {
-        var type = typeof(T);
-        var instance = Activator.CreateInstance(type)!;
-        var properties = type.GetProperties();
+        var properties = typeof(T).GetProperties();
 
         foreach (var property in properties)
         {
@@ -68,38 +69,37 @@ public class Decoder
             {
                 // Create the list
                 var list = Activator.CreateInstance(property.PropertyType);
-                var decoder = this.GetType()
-                    .GetMethod("InternalDecode", BindingFlags.NonPublic | BindingFlags.Instance)!
-                    .MakeGenericMethod(property.PropertyType.GenericTypeArguments[0]);
+                var childType = property.PropertyType.GenericTypeArguments[0];
 
                 input.Eat('l');
 
                 while (input.Peek() != 'e')
                 {
-                    var parsedValue = decoder.Invoke(this, new[] { input });
-                    property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { parsedValue });
+                    if (childType == typeof(string))
+                    {
+                        var propertyValue = ParseString(input);
+                        property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { propertyValue });
+                    }
+                    else if (childType == typeof(int))
+                    {
+                        var propertyValue = ParseInt(input);
+                        property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { (object)propertyValue });
+                    }
+                    else
+                    {
+                        var childInstance = Activator.CreateInstance(childType)!;
+                        InternalDecode(input, childInstance);
+                        property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { childInstance });                        
+                    }
+
                 }
-                
+                input.Eat('e');
+
                 property.SetValue(instance, list);
             }
-//                     // Invoke the decoder
-//              //       var r = decoder.Invoke(this, rest) as InternalResult<object>!;
-//                     
-//                     //  var 
-//                     //var r = decoder.Invoke(this, new[] { rest }) as InternalResult<char>!;
-//
-// // e                var item = Activator.CreateInstance(property.PropertyType.GenericTypeArguments[0]);
-// //                 rest = Decode<>(rest, out var propertyValue);
-// //                 property.SetValue(item, propertyValue);
-// //                 property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { item });
-//              //   }
-//
-//                 property.SetValue(instance, list);
-//             }
         }
 
         return (T)instance;
-        //return new InternalResult<T>(){Rest = rest, Instance = (T) instance};
     }
 
 
