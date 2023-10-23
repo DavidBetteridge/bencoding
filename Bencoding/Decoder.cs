@@ -65,6 +65,38 @@ public class Decoder
                 property.SetValue(instance, propertyValue);
             }
 
+            if (property.PropertyType.Name == "Dictionary`2")
+            {
+                // Create the list
+                var list = Activator.CreateInstance(property.PropertyType);
+                var childType = property.PropertyType.GenericTypeArguments[1];
+                input.Eat('d');
+                while (input.Peek() != 'e')
+                {
+                    var key = ParseString(input);
+                    
+                    if (childType == typeof(string))
+                    {
+                        var propertyValue = ParseString(input);
+                        property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { key, propertyValue });
+                    }
+                    else if (childType == typeof(int))
+                    {
+                        var propertyValue = ParseInt(input);
+                        property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { key, (object)propertyValue });
+                    }
+                    else
+                    {
+                        var childInstance = Activator.CreateInstance(childType)!;
+                        InternalDecode(input, childInstance);
+                        property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { key, childInstance });                        
+                    }
+
+                }
+                input.Eat('e');
+                property.SetValue(instance, list);
+            }
+
             if (property.PropertyType.Name == "List`1")
             {
                 // Create the list

@@ -1,7 +1,7 @@
 ﻿
 using System.Runtime;
 
-var test = "5:Davidi48e4:Yorkl3:Eve3:Baz4:Junaeli7ei11ee";
+var test = "5:Davidi48e4:Yorkl3:Eve3:Baz4:Junaeli7ei11eed5:David3:Red4:Paul4:Bluee";
 //var test = "5:Davidi48e4:York";
 
 var decoder = new Bencoding.Decoder();
@@ -16,6 +16,8 @@ foreach (var cat in result.Cats)
 foreach (var pn in result.PrimeNumbers)
     Console.WriteLine(pn);
 
+foreach (var colour in result.Colours)
+    Console.WriteLine($"{colour.Key} is {colour.Value}");
 
 class SimpleTest
 {
@@ -24,6 +26,8 @@ class SimpleTest
     public string Town { get; set; } = string.Empty;
     public List<Cat> Cats { get; set; }
     public List<int> PrimeNumbers { get; set; }
+    
+    public Dictionary<string, string> Colours { get; set; }
 }
 
 class Cat
