@@ -1,5 +1,3 @@
-using System.Reflection;
-
 namespace Bencoding;
 
 public class Decoder
@@ -53,61 +51,49 @@ public class Decoder
 
         foreach (var property in properties)
         {
-            var propertyValue = ParseProperty(input, property);
+            var propertyValue = ParseProperty(input, property.PropertyType);
             property.SetValue(instance, propertyValue);
         }
 
         return instance;
     }
 
-    private object ParseProperty(Input input, PropertyInfo property)
-    {
-        return property.PropertyType.Name switch
-        {
-            "String" => ParseString(input),
-            "Int32" => ParseInt(input),
-            "List`1" => ParseList(input, property),
-            "Dictionary`2" => ParseDictionary(input, property),
-            _ => ParseObject(input, property.PropertyType)
-        };
-    }
-    
-    private object ParseType(Input input, PropertyInfo property, Type type)
+    private object ParseProperty(Input input, Type type)
     {
         return type.Name switch
         {
             "String" => ParseString(input),
             "Int32" => ParseInt(input),
-            "List`1" => ParseList(input, property),
-            "Dictionary`2" => ParseDictionary(input, property),
+            "List`1" => ParseList(input, type),
+            "Dictionary`2" => ParseDictionary(input, type),
             _ => ParseObject(input, type)
         };
     }
 
-    private object ParseList(Input input, PropertyInfo property)
+    private object ParseList(Input input, Type type)
     {
-        var list = Activator.CreateInstance(property.PropertyType);
-        var childType = property.PropertyType.GenericTypeArguments[0];
+        var list = Activator.CreateInstance(type);
+        var childType = type.GenericTypeArguments[0];
         input.Eat('l');
         while (input.Peek() != 'e')
         {
-            var propertyValue = ParseType(input, property, childType);
-            property.PropertyType.GetMethod("Add")!.Invoke(list, new[] { propertyValue });
+            var propertyValue = ParseProperty(input, childType);
+            type.GetMethod("Add")!.Invoke(list, new[] { propertyValue });
         }
         input.Eat('e');
         return list!;
     }
 
-    private object ParseDictionary(Input input, PropertyInfo property)
+    private object ParseDictionary(Input input, Type type)
     {
-        var dictionary = Activator.CreateInstance(property.PropertyType);
-        var childType = property.PropertyType.GenericTypeArguments[1];
+        var dictionary = Activator.CreateInstance(type);
+        var childType = type.GenericTypeArguments[1];
         input.Eat('d');
         while (input.Peek() != 'e')
         {
             var key = ParseString(input);
-            var propertyValue = ParseType(input, property, childType);
-            property.PropertyType.GetMethod("Add")!.Invoke(dictionary, new[] { key, propertyValue });
+            var propertyValue = ParseProperty(input, childType);
+            type.GetMethod("Add")!.Invoke(dictionary, new[] { key, propertyValue });
         }
         input.Eat('e');
         return dictionary!;
