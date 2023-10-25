@@ -47,7 +47,7 @@ public class Decoder2
     private ReadOnlySpan<char> ParseInt(ReadOnlySpan<char> input, out object propertyValue)
     {
         var i = input.IndexOf('e'); // Error if 0,1 or -1
-        propertyValue = int.Parse(input.Slice(1, i - 1).ToString());
+        propertyValue = int.Parse(input.Slice(1, i - 1));
         return input.Slice(i + 1);
     }
     
